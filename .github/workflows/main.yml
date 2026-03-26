@@ -5,30 +5,45 @@ jobs:
   desktop-access:
     runs-on: macos-latest
     steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
       - name: Set Password for Runner
         run: |
-          # Sets 'password123' as the user password (change this if you want)
-          sudo dscl . -passwd /Users/runner password123
+          # Uses sysadminctl to bypass the 'old password' requirement
+          sudo sysadminctl -adminUser runner -adminPassword "" -password password123
 
       - name: Enable Screen Sharing (VNC)
         run: |
+          # Activates Remote Management and allows all users to access
           sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
           -activate -configure -access -on \
-          -privs -all -restart -agent
+          -privs -all -restart -agent -allowAccessFor -allUsers
 
       - name: Install and Start Tailscale
         env:
           TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
         run: |
+          # Install via Homebrew
           brew install tailscale
+          
+          # Start the daemon in the background
           sudo tailscaled > /dev/null 2>&1 &
+          
+          # Wait a few seconds for the daemon to initialize
           sleep 5
+          
+          # Connect to your Tailscale network
           sudo tailscale up --authkey=$TAILSCALE_AUTHKEY --hostname=github-mac
 
-      - name: Keep Alive
+      - name: Keep Runner Alive
         run: |
-          echo "Connect via VNC to the IP shown in your Tailscale dashboard."
-          echo "Username: runner"
-          echo "Password: password123"
-          # Keeps the session open for 6 hours
+          echo "-------------------------------------------------------"
+          echo "CONNECTION INFO:"
+          echo "1. Find 'github-mac' in your Tailscale Dashboard"
+          echo "2. Connect via VNC/Screen Sharing to that IP"
+          echo "3. Username: runner"
+          echo "4. Password: password123"
+          echo "-------------------------------------------------------"
+          # Keeps the VM alive for 6 hours
           sleep 21600
