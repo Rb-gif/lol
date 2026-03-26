@@ -1,30 +1,34 @@
-name: macOS Remote via Tailscale
-on: workflow_dispatch # Allows you to start it manually
+name: macOS Remote Desktop
+on: workflow_dispatch
 
 jobs:
-  terminal-access:
+  desktop-access:
     runs-on: macos-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Set Password for Runner
+        run: |
+          # Sets 'password123' as the user password (change this if you want)
+          sudo dscl . -passwd /Users/runner password123
+
+      - name: Enable Screen Sharing (VNC)
+        run: |
+          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+          -activate -configure -access -on \
+          -privs -all -restart -agent
 
       - name: Install and Start Tailscale
         env:
           TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
         run: |
-          # Install Tailscale using Homebrew
           brew install tailscale
-          
-          # Start Tailscale background service
           sudo tailscaled > /dev/null 2>&1 &
-          
-          # Connect to your Tailscale network
-          sudo tailscale up --authkey=$TAILSCALE_AUTHKEY
-          
-          echo "Connected! Check your Tailscale dashboard for the machine name."
+          sleep 5
+          sudo tailscale up --authkey=$TAILSCALE_AUTHKEY --hostname=github-mac
 
-      - name: Keep Runner Alive
+      - name: Keep Alive
         run: |
-          echo "Runner is active. You can SSH into this Mac now."
-          # This loop keeps the Mac running for 6 hours (the GitHub limit)
+          echo "Connect via VNC to the IP shown in your Tailscale dashboard."
+          echo "Username: runner"
+          echo "Password: password123"
+          # Keeps the session open for 6 hours
           sleep 21600
