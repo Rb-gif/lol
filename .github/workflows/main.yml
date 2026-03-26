@@ -9,31 +9,40 @@ jobs:
       - name: Check Out Code
         uses: actions/checkout@v4
 
+      - name: Setup RDP User
+        shell: powershell
+        run: |
+          $User = "${{ secrets.RDP_USERNAME }}"
+          $Pass = "${{ secrets.RDP_PASSWORD }}"
+          $Password = ConvertTo-SecureString $Pass -AsPlainText -Force
+          New-LocalUser -Name $User -Password $Password -Description "RDP User" -FullName "$User"
+          Add-LocalGroupMember -Group "Administrators" -Member $User
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member $User
+          Write-Host "User $User created and added to RDP/Admin groups."
+
       - name: Install Tailscale
         shell: powershell
         run: |
           Set-ExecutionPolicy Bypass -Scope Process -Force
-          [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-          iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
           choco install tailscale -y
           
       - name: Connect to Tailscale
         shell: powershell
-        # You must add a TAILSCALE_AUTH_KEY to your GitHub Repository Secrets
-        run: tailscale up --authkey ${{ secrets.TAILSCALE_AUTH_KEY }}
-
-      - name: Install Software
-        shell: powershell
         run: |
-          # Installing apps via Chocolatey
-          choco install androidstudio -y
-          choco install malwarebytes -y
-          choco install steam -y
-          choco install scratch3 -y
-          # Note: VirtualBox often requires a reboot/nested virtualization which may not work here.
-          choco install virtualbox -y 
-          # TurboWarp is often used as a desktop app or web; here is the desktop version:
-          choco install turbowarp-desktop -y
+          # Connects the VM to your Tailscale network
+          tailscale up --authkey ${{ secrets.TAILSCALE_AUTH_KEY }} --accept-routes
+          tailscale status
+
+      - name: Install Software (Continue on Error)
+        shell: powershell
+        continue-on-error: true
+        run: |
+          # Installing requested apps. VirtualBox may fail due to nested virtualization limits.
+          $apps = @("androidstudio", "malwarebytes", "steam", "scratch3", "turbowarp-desktop", "virtualbox")
+          foreach ($app in $apps) {
+              Write-Host "Installing $app..."
+              choco install $app -y --limit-output --no-progress --ignore-checksums
+          }
 
       - name: Create Desktop Readme
         shell: powershell
@@ -42,12 +51,19 @@ jobs:
           Show Your Cloud Is Working 
           Made By RBXuncopylocker And Gemini Google And GitHub And Tailscale
           "@
-          $desktopPath = [Environment]::GetFolderPath("Desktop")
+          # Create for the new user specifically
+          $desktopPath = "C:\Users\${{ secrets.RDP_USERNAME }}\Desktop"
+          if (!(Test-Path $desktopPath)) { New-Item -ItemType Directory -Path $desktopPath -Force }
           $content | Out-File -FilePath "$desktopPath\readme.txt" -Encoding ascii
 
       - name: Keep Alive
         shell: powershell
         run: |
-          Write-Host "Windows is ready! Connect via Remote Desktop using your Tailscale IP."
-          # This loops for 6 hours (the GitHub limit) to keep the VM active
+          $ip = (tailscale ip -4)
+          Write-Host "----------------------------------------------------"
+          Write-Host "RDP USERNAME: ${{ secrets.RDP_USERNAME }}"
+          Write-Host "TAILSCALE IP: $ip"
+          Write-Host "Connect via Remote Desktop (RDP) using the IP above."
+          Write-Host "----------------------------------------------------"
+          # Keeps the session active for 6 hours
           Start-Sleep -Seconds 21600
