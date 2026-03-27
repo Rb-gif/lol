@@ -5,8 +5,8 @@ on:
 
 jobs:
   secure-rdp:
-   
-    runs-on: windows-2022 
+    # Change this line from windows-2022 to windows-2019
+    runs-on: windows-2019 
     timeout-minutes: 3600
 
     steps:
